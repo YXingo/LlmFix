@@ -1,4 +1,4 @@
-# Improving-LLMs-with-Post-Processing-for-Code-Generation
+# Fixing Code Generation Errors for Large Language Models
 This replication package contains three .py files: postprocessing.py, modules_db.py, ChatGPT.py
 
 - `postprocessing.py`: Integrates four repair solutions proposed in the paper, tests the model, and is applicable to open-source models on Hugging Face.
