@@ -1,9 +1,9 @@
 import re
 import time
 import signal
+import ChatGPT
 import modules_db
 import statistics
-from datasets import load_dataset
 
 
 def raise_timeout(signum, frame):
@@ -32,40 +32,94 @@ def remove_last_row(code):
     return code
 
 
-def filter(code: str) -> str:
-    code.replace("    ", "\t").replace("   ", "\t").replace("  ", "\t").replace("\t", "    ")
+def filter(code: str, do_fix=False, GPT=False) -> str:
+    if GPT:
+        code_match = re.search(r"```python\n(.*?)```", code, re.DOTALL)
+        code = code_match.group(1).strip() if code_match else code
+
+    if do_fix:
+        code.replace("    ", "\t").replace("   ", "\t").replace("  ", "\t").replace("\t", "    ")
+
     code = code.split('if __name__ == "__main__":')[0]
     code = code.split("if __name__ == '__main__':")[0]
-    lines = code.split('\n')
-    new_lines = []
-    for line in lines:
-        if not (line.strip().startswith('print') or line.strip().startswith('input') or line.strip().startswith(
-                'assert')):
-            new_lines.append(line)
-    code = '\n'.join(new_lines)
+
+    if do_fix:
+        lines = code.split('\n')
+        new_lines = []
+        for line in lines:
+            if not (line.strip().startswith('print') or line.strip().startswith('input') or line.strip().startswith(
+                    'assert')):
+                new_lines.append(line)
+        code = '\n'.join(new_lines)
+
+    if not do_fix:
+        try:
+            signal.signal(signal.SIGALRM, raise_timeout)
+            signal.alarm(1)
+
+            exec(code)
+
+            signal.alarm(0)
+
+            return code
+        except Exception:
+            signal.alarm(0)
+
+            if get_and_remove_last_function(get_and_remove_last_function(code)[1])[1] == '':
+                return code
+            else:
+                return get_and_remove_last_function(code)[1]
 
     return code
 
 
-def execute_test(candidate_solution, test, entry_point_name):
+def execute_test(candidate_solution, test, entry_point_name=None, do_fix=False, mbpp=False):
     global_namespace = {}
-    execute_check = """check(""" + entry_point_name + """)"""
 
-    try:
-        signal.signal(signal.SIGALRM, raise_timeout)
-        signal.alarm(1)
+    if mbpp:
+        test_multi_lines = '\n'.join(test)
 
-        exec(candidate_solution, global_namespace)
-        exec(test, global_namespace)
-        exec(execute_check, global_namespace)
+        try:
+            signal.signal(signal.SIGALRM, raise_timeout)
+            signal.alarm(1)
 
-        signal.alarm(0)
+            if do_fix:
+                exec(candidate_solution, global_namespace)
+                exec(test_multi_lines, global_namespace)
+            else:
+                exec(candidate_solution)
+                exec(test_multi_lines)
 
-        return True, None
-    except Exception as e:
+            signal.alarm(0)
 
-        signal.alarm(0)
-        return False, e
+            return True, None
+        except Exception as e:
+
+            signal.alarm(0)
+            return False, e
+    else:
+        execute_check = """check(""" + entry_point_name + """)"""
+
+        try:
+            signal.signal(signal.SIGALRM, raise_timeout)
+            signal.alarm(1)
+
+            if do_fix:
+                exec(candidate_solution, global_namespace)
+                exec(test, global_namespace)
+                exec(execute_check, global_namespace)
+            else:
+                exec(candidate_solution)
+                exec(test)
+                exec(execute_check)
+
+            signal.alarm(0)
+
+            return True, None
+        except Exception as e:
+
+            signal.alarm(0)
+            return False, e
 
 
 def add_import_statement(missing_name, code):
@@ -75,6 +129,9 @@ def add_import_statement(missing_name, code):
         import_statement = f"import {missing_name}\n\n"
     elif missing_name in modules_db.fcs:
         import_statement = f"from {modules_db.fcs[missing_name]} import {missing_name}\n\n"
+
+    if missing_name == 'np':
+        import_statement = "import numpy as np\n\n"
 
     code = import_statement + code
     return code
@@ -106,64 +163,76 @@ def print_test_result(judge, exception=None, log_file=None, final=False):
               f"Exception message: {str(exception)}\n")
 
 
-def test_single_sample(code, dataset, id, log_file=None):
-    sample = dataset['test'][id]
-
-    test = sample['test']
-    entry_point = sample['entry_point']
-
-    code = filter(code)
+def test_single_sample(code, dataset, id, log_file=None, do_fix=False, mbpp=False, GPT=False):
+    code = filter(code, do_fix=do_fix, GPT=GPT)
     print(f"\n- - - - - - - - - - - - - - -\nfilter result: "
           f"\n\n{code}\n- - - - - - - - - - - - - - -\n", file=log_file)
     print(f"\n- - - - - - - - - - - - - - -\nfilter result: "
           f"\n\n{code}\n- - - - - - - - - - - - - - -\n")
 
-    judge, exception = execute_test(code, test, entry_point)
+    if do_fix:
+        judge = False
+        while not judge:
+            try:
+                compile(source=code, filename='', mode='exec')
+                judge = True
+            except Exception as e:
+                code = get_and_remove_last_function(code)[1]
+                judge = False
+                print(f"\n- - - - - - - - - - - - - - -\nFix compilation stage exceptions result: "
+                      f"\n\n{code}\n- - - - - - - - - - - - - - -\n", file=log_file)
+                print(f"\n- - - - - - - - - - - - - - -\nFix compilation stage exceptions result: "
+                      f"\n\n{code}\n- - - - - - - - - - - - - - -\n")
+
+    if mbpp:
+        sample = dataset['test'][id]
+        test = sample['test_list']
+
+        judge, exception = execute_test(code, test, do_fix=do_fix, mbpp=mbpp)
+    else:
+        sample = dataset['test'][id]
+        test = sample['test']
+        entry_point = sample['entry_point']
+
+        judge, exception = execute_test(code, test, entry_point, do_fix=do_fix, mbpp=mbpp)
+
     print_test_result(judge, exception, log_file)
 
-    if not judge:
-        while type(exception).__name__ == 'SyntaxError' or code == '':
-            code = get_and_remove_last_function(code)[1]
-            judge, exception = execute_test(code, test, entry_point)
-            print(f"\n- - - - - - - - - - - - - - -\nfix SyntaxError result: "
-                  f"\n\n{code}\n- - - - - - - - - - - - - - -\n", file=log_file)
-            print(f"\n- - - - - - - - - - - - - - -\nfix SyntaxError result: "
-                  f"\n\n{code}\n- - - - - - - - - - - - - - -\n")
-            print_test_result(judge, exception, log_file)
-
+    if not judge and do_fix:
         if type(exception).__name__ == 'NameError':
             while True:
                 fixed_code = add_import_statement(get_missing_name(str(exception)), code)
+
                 if code == fixed_code or judge:
                     break
                 else:
                     code = fixed_code
 
-                judge, exception = execute_test(code, test, entry_point)
+                if mbpp:
+                    judge, exception = execute_test(code, test, do_fix=do_fix, mbpp=mbpp)
+                else:
+                    judge, exception = execute_test(code, test, entry_point, do_fix=do_fix, mbpp=mbpp)
 
-            judge, exception = execute_test(code, test, entry_point)
+            if mbpp:
+                judge, exception = execute_test(code, test, do_fix=do_fix, mbpp=mbpp)
+            else:
+                judge, exception = execute_test(code, test, entry_point, do_fix=do_fix, mbpp=mbpp)
             print(f"\n- - - - - - - - - - - - - - -\nfix NameError result: "
                   f"\n\n{code}\n- - - - - - - - - - - - - - -\n", file=log_file)
             print(f"\n- - - - - - - - - - - - - - -\nfix NameError result: "
                   f"\n\n{code}\n- - - - - - - - - - - - - - -\n")
             print_test_result(judge, exception, log_file)
 
-        if not judge:
-            while True:
-                if code == '' or get_and_remove_last_function(code)[1] == '' or judge:
-                    break
-                code = get_and_remove_last_function(code)[1]
-                judge, exception = execute_test(code, test, entry_point)
-            print(f"\n- - - - - - - - - - - - - - -\nremove needless functions result: "
-                  f"\n\n{code}\n- - - - - - - - - - - - - - -\n", file=log_file)
-            print(f"\n- - - - - - - - - - - - - - -\nremove needless functions result: "
-                  f"\n\n{code}\n- - - - - - - - - - - - - - -\n")
-
     return code, judge, exception
 
 
-def test_all_samples(pipe, dataset, log_file=None, epoch=None):
+def test_all_samples(pipe, dataset, log_file=None, do_fix=False, mbpp=False, epoch=None, test_dataset=None, GPT=False):
+    if not pipe:
+        gpt = ChatGPT.ChatGPT()
+        pre = "Based on the comments in the following Python function, provide the complete implementation of the function. Note: You only need to give the complete implementation of the function. No other content is required. \n"
+
     all_start_time = time.time()
+
     num_correct, count = 0, 0
 
     for sample in dataset['test']:
@@ -171,7 +240,13 @@ def test_all_samples(pipe, dataset, log_file=None, epoch=None):
         prompt = sample['prompt']
 
         single_start_time = time.time()
-        code = pipe(prompt, max_length=1024, do_sample=True, temperature=0.2, top_p=0.9)[0]['generated_text']
+
+        if pipe:
+            code = pipe(prompt, max_length=1024, do_sample=True, temperature=0.2, top_p=0.9)[0]['generated_text']
+        else:
+            gpt.clear_context_conversion()
+            code = gpt.safe_ask_gpt(pre + prompt)
+
         single_end_time = time.time()
 
         print(f"\n--------------------------------------------\n\n"
@@ -185,7 +260,12 @@ def test_all_samples(pipe, dataset, log_file=None, epoch=None):
               f"Original generated result: "
               f"\n\n{code}\n\n- - - - - - - - - - - - - - -\n\n")
 
-        code, judge, exception = test_single_sample(code, dataset, count, log_file)
+        if mbpp:
+            code, judge, exception = test_single_sample(code, test_dataset, count, log_file, do_fix=do_fix, mbpp=mbpp,
+                                                        GPT=GPT)
+        else:
+            code, judge, exception = test_single_sample(code, dataset, count, log_file, do_fix=do_fix, mbpp=mbpp,
+                                                        GPT=GPT)
 
         print(f"\n- - - - - - - - - - - - - - -\n\n"
               f"Final result: \n\n{code}\n\n", file=log_file)
@@ -214,14 +294,15 @@ def test_all_samples(pipe, dataset, log_file=None, epoch=None):
     return accuracy, all_end_time - all_start_time
 
 
-def test_multiple_times(pipe, dataset, log_file=None, times=10):
+def test_multiple_times(pipe, dataset, log_file=None, do_fix=False, mbpp=False, times=10, test_dataset=None, GPT=False):
     all_accuracies, all_times = [], []
 
     for i in range(times):
         print(f"\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n=> Epoch {i}: ", file=log_file)
         print(f"\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n=> Epoch {i}: ")
 
-        accuracy, time = test_all_samples(pipe, dataset, log_file, epoch=i)
+        accuracy, time = test_all_samples(pipe, dataset, log_file, do_fix=do_fix, mbpp=mbpp, epoch=i,
+                                          test_dataset=test_dataset, GPT=GPT)
 
         all_accuracies.append(accuracy)
         all_times.append(time)
