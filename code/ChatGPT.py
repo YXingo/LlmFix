@@ -3,23 +3,11 @@ import openai
 
 
 class ChatGPT:
-
     def __init__(self):
         self.conversation = [
             {"role": "system", "content": "You are a helpful assistant."}]
 
     def ask_gpt(self, user_input: str) -> str:
-        """
-        model used is gpt-3.5-turbo
-        temperature is set to be 0.0, which is most deterministic and least random
-        max_token is default, which is (4096 - prompt tokens)
-
-        Parameter
-        ----------
-        question : str
-            The question to be asked to chatgpt
-        """
-
         self.conversation.append({"role": "user", "content": user_input})
 
         response = openai.ChatCompletion.create(
@@ -39,17 +27,15 @@ class ChatGPT:
     def safe_ask_gpt(self, user_input: str, max_retries=100, retry_delay=3):
         for attempt in range(max_retries):
             try:
-                # 尝试执行 ask_gpt 函数
                 response = self.ask_gpt(user_input)
-                return response  # 成功则返回响应
+                return response
             except Exception as e:
-                # 捕获异常并检查是否还有重试的机会
                 if attempt < max_retries - 1:
-                    print(f"连接失败，将在 {retry_delay} 秒后重试...")
-                    time.sleep(retry_delay)  # 等待一段时间后重试
+                    print(f"Retry in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
                 else:
-                    print("重试次数用尽，程序中止。")
-                    raise e  # 重试用尽后抛出最后一次的异常
+                    print("Stopped.")
+                    raise e
 
     def ask_checker(self, main_gpt_response: str, prompt: str) -> str:
         if main_gpt_response is not None:
