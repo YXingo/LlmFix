@@ -12,7 +12,9 @@ def invert_dict(d1):
 with open('modules.json', 'r') as f:
     fcs = json.load(f)
 
-modules = ['math', 'typing', 'functools', 'string', 'hashlib', 'random', 'heapq', 're', 'numpy', 'np', 'cmath', 'itertools']
+modules = ['math', 'typing', 'functools', 'string', 'hashlib', 'random', 'heapq', 're', 'numpy', 'cmath', 'itertools',
+           'pandas', 'pytest', 'scipy', 'matplotlib', 'sklearn', 'pyglet', 'OpenGL', 'decimal', 'datetime',
+           'collections', 'fractions']
 
 fcs = invert_dict(fcs)
 # print(fcs)
