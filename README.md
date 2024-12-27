@@ -1,8 +1,8 @@
 # LlmFix
 
-## code
+## src
 
-- `postprocessing.py`: Contains various functions for testing open-source models on Hugging Face or GPT-3.5-turbo. You can choose to apply the fix solutions proposed in the paper to test the models.
+- `LlmFix.py`: Contains various functions for testing open-source models on Hugging Face or GPT-3.5-turbo. You can choose to apply the fix solutions proposed in the paper to test the models.
 - `modules_db.py, modules.json`: A simple database built based on commonly used modules and functions in the model.
 - `ChatGPT.py`: A simple wrapper for various OpenAI models.
 
@@ -34,6 +34,6 @@ python3 mbpp-gpt-3.5-turbo.py
 
 If you want to test other models, you will need to modify the code in the corresponding files.
 
-## data
+## datasets
 
-This folder contains all the experimental data presented in the paper.
+This folder contains all the datasets used in the paper.
