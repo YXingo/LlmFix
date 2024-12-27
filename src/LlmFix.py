@@ -112,14 +112,12 @@ def execute_test(candidate_solution, test, entry_point_name=None, mbpp=False):
         test_multi_lines = '\n'.join(test)
 
         try:
-            # 设置信号处理函数
             signal.signal(signal.SIGALRM, raise_timeout)
             signal.alarm(1)
 
             exec(candidate_solution, {})
             exec(test_multi_lines, {})
 
-            # 清除警报信号
             signal.alarm(0)
 
             return True, None
@@ -176,14 +174,10 @@ def print_test_result(judge, exception=None, log_file=None, final=False):
 
     if judge:
         print(f"{ex}Test result: Pass the test.\n", file=log_file)
-        print(f"{ex}Test result: Pass the test.\n")
     else:
         print(f"{ex}Test result: Fail the test.\n"
               f"Exception type: {type(exception).__name__}\n"
               f"Exception message: {str(exception)}\n", file=log_file)
-        print(f"{ex}Test result: Fail the test.\n"
-              f"Exception type: {type(exception).__name__}\n"
-              f"Exception message: {str(exception)}\n")
 
 
 def test_single_sample(code, dataset, id, log_file=None, mbpp=False, GPT=False):
